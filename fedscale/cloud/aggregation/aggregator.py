@@ -26,6 +26,8 @@ from fedscale.cloud.resource_manager import ResourceManager
 from fedscale.cloud.fllibs import *
 from torch.utils.tensorboard import SummaryWriter
 
+import flbenchmark.logging
+
 MAX_MESSAGE_LENGTH = 1 * 1024 * 1024 * 1024  # 1GB
 
 
@@ -42,6 +44,9 @@ class Aggregator(job_api_pb2_grpc.JobServiceServicer):
         logger.initiate_aggregator_setting()
 
         logging.info(f"Job args {args}")
+        # for out logging system
+        self.logger = flbenchmark.logging.Logger(id=0, agent_type='aggregator')
+
         self.args = args
         self.experiment_mode = args.experiment_mode
         self.device = args.cuda_device if args.use_cuda else torch.device(
@@ -89,6 +94,7 @@ class Aggregator(job_api_pb2_grpc.JobServiceServicer):
         self.model_update_size = 0.
 
         self.collate_fn = None
+        self.task = args.task
         self.round = 0
 
         self.start_run_time = time.time()

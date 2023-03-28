@@ -20,6 +20,7 @@ from fedscale.cloud.execution.rl_client import RLClient
 from fedscale.cloud.fllibs import *
 from fedscale.dataloaders.divide_data import DataPartitioner, select_dataset
 
+import flbenchmark.logging
 
 class Executor(object):
     """Abstract class for FedScale executor.
@@ -50,10 +51,14 @@ class Executor(object):
 
         # ======== runtime information ========
         self.collate_fn = None
+        self.task = args.task
         self.round = 0
         self.start_run_time = time.time()
         self.received_stop_request = False
         self.event_queue = collections.deque()
+
+        self.logger = flbenchmark.logging.Logger(id=args.this_rank, agent_type='client')
+        self.not_end = True
 
         if args.wandb_token != "":
             os.environ['WANDB_API_KEY'] = args.wandb_token
@@ -139,7 +144,10 @@ class Executor(object):
         """Start running the executor by setting up execution and communication environment, and monitoring the grpc message.
         """
         self.setup_env()
+        self.logger.preprocess_data_start()
         self.training_sets, self.testing_sets = self.init_data()
+        self.logger.preprocess_data_end()
+        self.logger.training_start()
         self.setup_communication()
         self.event_monitor()
 
@@ -382,7 +390,13 @@ class Executor(object):
                     train_model = self.deserialize_response(request.data)
                     train_config['model'] = train_model
                     train_config['client_id'] = int(train_config['client_id'])
+                    self.logger.training_round_start()
+                    self.logger.computation_start()
+
                     client_id, train_res = self.Train(train_config)
+
+                    self.logger.computation_end()
+                    self.logger.communication_start(target_id = 0)
 
                     # Upload model updates
                     future_call = self.aggregator_communicator.stub.CLIENT_EXECUTE_COMPLETION.future(
@@ -391,7 +405,12 @@ class Executor(object):
                                                     meta_result=None, data_result=self.serialize_response(train_res)
                                                     ))
                     future_call.add_done_callback(lambda _response: self.dispatch_worker_events(_response.result()))
-
+                    self.logger.communication_end(metrics={'byte': self.model_update_size})
+                    self.logger.training_round_end(metrics={'client_num': self.args.
+                    if self.round == self.args.rounds - 1 and self.not_end:
+                        self.logger.training_end()
+                        self.logger.end()
+                        self.not_end = False
                 elif current_event == commons.MODEL_TEST:
                     self.Test(self.deserialize_response(request.meta))
 

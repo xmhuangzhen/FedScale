@@ -41,9 +41,15 @@ class DataPartitioner(object):
         self.isTest = isTest
         np.random.seed(seed)
 
+        self.temp_tag = args.temp_tag
+
         self.data_len = len(self.data)
+        self.task = args.task
         self.numOfLabels = numOfClass
         self.client_label_cnt = defaultdict(set)
+        self.dvd_num = 0
+        if args.task == 'simple' and self.data.data_file == 'train':
+            self.dvd_num = self.data.dvd_num
 
     def getNumOfLabels(self):
         return self.numOfLabels
@@ -90,10 +96,47 @@ class DataPartitioner(object):
         for idx in range(sample_id):
             self.partitions[client_id_maps[idx]].append(idx)
 
-    def partition_data_helper(self, num_clients, data_map_file=None):
+    def fate_partition(self):
+        if self.isTest:
+            self.partitions = [list(range(self.data_len)), list(range(self.data_len))]
+        else:
+            self.partitions = [list(range(self.dvd_num)), list(range(self.dvd_num, self.data_len))]
+
+    def femnist_partition(self, data_dir):
+        logging.info("partitioning femnist dataset")
+
+        self.partitions = []
+
+        if self.isTest:
+            data_dir = os.path.join(data_dir,'test')
+        else:
+            data_dir = os.path.join(data_dir,'train')
+        
+        isExists = os.path.exists(data_dir)
+        logging.info(f"checking:{isExists}")
+
+        files = os.listdir(data_dir)        
+        files = [f for f in files if f.endswith('.json') and f[0]!='_']
+
+        sum_len = 0
+        for f in files:
+            file_path = os.path.join(data_dir, f)
+            my_data = np.array(json.load(open(file_path, 'r'))["records"])
+            cur_data_len = len(my_data[:,0])
+
+            self.partitions.append(list(range(sum_len,sum_len+cur_data_len)))
+            sum_len = sum_len + cur_data_len
+
+
+
+    def partition_data_helper(self, num_clients, data_map_file=None, data_dir = None):
 
         # read mapping file to partition trace
-        if data_map_file is not None:
+        if self.args.task == "simple":
+            self.fate_partition()
+        elif self.args.temp_tag == "simple_femnist":
+            self.femnist_partition(data_dir)
+        elif data_map_file is not None:
             self.trace_partition(data_map_file)
         else:
             self.uniform_partition(num_clients=num_clients)

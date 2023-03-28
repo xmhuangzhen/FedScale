@@ -36,10 +36,17 @@ def load_yaml_conf(yaml_file):
         data = yaml.load(fin, Loader=yaml.FullLoader)
     return data
 
+def load_json_conf(json_file):
+    with open(json_file) as fin:
+        data = json.load(fin)
+    return data
 
-def process_cmd(yaml_file, local=False):
+def process_cmd(json_file, local=False):
+    json_conf = load_json_conf(json_file)
 
-    yaml_conf = load_yaml_conf(yaml_file)
+    # yaml_conf = load_yaml_conf(yaml_file)
+
+    yaml_conf = load_yaml_conf("./base_conf.yml")
 
     if 'use_container' in yaml_conf:
         if yaml_conf['use_container'] == "docker":
@@ -53,8 +60,6 @@ def process_cmd(yaml_file, local=False):
             exit(1)
     else:
         use_container = "default"
-
-
 
     ps_ip = yaml_conf['ps_ip']
     worker_ips, total_gpus = [], []
@@ -91,12 +96,55 @@ def process_cmd(yaml_file, local=False):
     cmd_sufix = f" "
 
     for conf_name in job_conf:
-        conf_script = conf_script + f' --{conf_name} {job_conf[conf_name]}'
+        if conf_name == "job_name":
+            job_conf[conf_name] = json_conf["dataset"] + '+' + json_conf["model"]
+        elif conf_name == "task":
+            if json_conf['dataset'] == 'femnist':
+                job_conf[conf_name] = 'cv'
+            else:
+                job_conf[conf_name] = "simple" # TO-DO ?
+        elif conf_name == "num_participants":
+            job_conf[conf_name] = json_conf["training_param"]["client_per_round"]
+        elif conf_name == "data_set":
+            if json_conf['dataset'] == 'femnist':
+                job_conf[conf_name] = 'femnist2'
+            else:
+                job_conf[conf_name] = json_conf["dataset"]
+        elif conf_name == "data_dir":
+            if json_conf['dataset'] == 'femnist':
+                job_conf[conf_name] = "../data/" + json_conf["dataset"]
+            else:
+                job_conf[conf_name] = "../data/csv_data/" + json_conf["dataset"]
+        elif conf_name == "model":
+            job_conf[conf_name] = json_conf["model"]
+        elif conf_name == "gradient_policy":
+            job_conf[conf_name] = json_conf["algorithm"]
+        elif conf_name == "eval_interval":
+            job_conf[conf_name] = json_conf["training_param"]["epochs"] 
+        elif conf_name == "rounds":
+            job_conf[conf_name] = json_conf["training_param"]["epochs"] + 1
+        elif conf_name == "inner_step":
+            job_conf[conf_name] = json_conf["training_param"]["inner_step"]
+        elif conf_name == "learning_rate":
+            job_conf[conf_name] = json_conf["training_param"]["learning_rate"]
+        elif conf_name == "batch_size":
+            job_conf[conf_name] = json_conf["training_param"]["batch_size"]
+        elif conf_name == "use_cuda":
+            job_conf[conf_name] = (json_conf["bench_param"]["device"] == "gpu")
+
+        conf_script = conf_script + f' --{conf_name}={job_conf[conf_name]}'
         if conf_name == "job_name":
             job_name = job_conf[conf_name]
         if conf_name == "log_path":
             log_path = os.path.join(
                 job_conf[conf_name], 'log', job_name, time_stamp)
+
+    if json_conf['dataset'] == 'femnist':
+        # job_conf['data_set'] = 'femnist2'
+        # job_conf['temp_tag'] = 'simple_femnist'
+        conf_script = conf_script + ' --temp_tag=simple_femnist'
+
+    print(conf_script)
 
     total_gpu_processes = sum([sum(x) for x in total_gpus])
 

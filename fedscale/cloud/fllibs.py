@@ -87,9 +87,17 @@ os.environ['MASTER_ADDR'] = parser.args.ps_ip
 os.environ['MASTER_PORT'] = parser.args.ps_port
 
 outputClass = {'Mnist': 10, 'cifar10': 10, "imagenet": 1000, 'emnist': 47, 'amazon': 5,
-               'openImg': 596, 'google_speech': 35, 'femnist': 62, 'yelp': 5, 'inaturalist': 1010
+               'openImg': 596, 'google_speech': 35, 'femnist': 62, 'yelp': 5, 'inaturalist': 1010,
+               'give_credit_horizontal': 2, 'default_credit_horizontal': 2, 'femnist2': 62,
+               'default_credit_horizontal': 2, 'breast_horizontal': 2, 'vehicle_scale_horizontal': 4,
+               'student_horizontal': 1 
                }
 
+# used for FATE
+inputClass = {'give_credit_horizontal': 10, 'default_credit_horizontal': 23, 'femnist2': 784, 'femnist': 784,
+              'default_credit_horizontal': 23, 'breast_horizontal': 30, 'vehicle_scale_horizontal': 18,
+              'student_horizontal': 13 
+             }
 
 def init_model():
     global tokenizer
@@ -191,14 +199,36 @@ def init_model():
         return model
     elif parser.args.task == 'rl':
         model = DQN(parser.args).target_net
+    elif parser.args.task == 'simple':
+        if parser.args.model == 'logistic_regression':
+            from fedscale.utils.models.simple.models import LogisticRegression
+            model = LogisticRegression(inputClass[parser.args.data_set], outputClass[parser.args.data_set])
+        elif parser.args.model == 'linear_regression':
+            from fedscale.utils.models.simple.models import linearRegression
+            model = linearRegression(inputClass[parser.args.data_set], outputClass[parser.args.data_set])
+        elif parser.args.model[:3] == "mlp":
+            from fedscale.utils.models.simple.models import MLP
+            model_name = parser.args.model
+            hidden = list(model_name.split('_'))[1:]
+            hidden = [int(x) for x in hidden]
+            model = MLP(inputClass[parser.args.data_set], outputClass[parser.args.data_set], hidden_dim = hidden)
     else:
-        if parser.args.model == "lr":
+        if parser.args.model == "lr" or parser.args.model == 'logistic_regression':
             from fedscale.utils.models.simple.models import LogisticRegression
             model = LogisticRegression(
-                parser.args.input_dim, outputClass[parser.args.data_set])
+                inputClass[parser.args.data_set], outputClass[parser.args.data_set])
         elif parser.args.model == 'svm':
             from fedscale.utils.models.simple.models import LinearSVM
             model = LinearSVM(parser.args.input_dim, outputClass[parser.args.data_set])
+        elif parser.args.model == 'lenet':
+            from fedscale.utils.models.simple.models import LeNetForMNIST
+            model = LeNetForMNIST(num_classes=outputClass[parser.args.data_set])
+        elif parser.args.model[:3] == 'mlp':
+            from fedscale.utils.models.simple.models import MLP
+            model_name = parser.args.model
+            hidden = list(model_name.split('_'))[1:]
+            hidden = [int(x) for x in hidden]
+            model = MLP(inputClass[parser.args.data_set], outputClass[parser.args.data_set], hidden_dim = hidden)
         elif parser.args.model_zoo == "fedscale-tensorflow-zoo":
             assert parser.args.engine == commons.TENSORFLOW
             model = get_tensorflow_model(parser.args.model, parser.args)
@@ -281,6 +311,15 @@ def init_dataset():
                 parser.args.data_dir, dataset='train', transform=train_transform)
             test_dataset = FEMNIST(
                 parser.args.data_dir, dataset='test', transform=test_transform)
+        elif parser.args.data_set == 'femnist2':
+            from fedscale.dataloaders.femnist2 import FEMNIST2
+
+            train_transform, test_transform = get_data_transform('mnist')
+            train_dataset = FEMNIST2(
+                parser.args.data_dir, dataset='train', transform=train_transform)
+            test_dataset = FEMNIST2(
+                parser.args.data_dir, dataset='test', transform=test_transform)
+
 
         elif parser.args.data_set == 'openImg':
             from fedscale.dataloaders.openimage import OpenImage
@@ -365,6 +404,26 @@ def init_dataset():
                                               normalize=True,
                                               speed_volume_perturb=False,
                                               spec_augment=False)
+        elif parser.args.data_set == 'give_credit_horizontal':
+            from fedscale.dataloaders.fate import FATE
+            train_dataset = FATE(parser.args.data_dir, inner_task = 'give_credit_horizontal', dataset='train')
+            test_dataset = FATE(parser.args.data_dir, inner_task = 'give_credit_horizontal', dataset='test') 
+        elif parser.args.data_set == 'default_credit_horizontal':
+            from fedscale.dataloaders.fate import FATE
+            train_dataset = FATE(parser.args.data_dir, inner_task = 'default_credit_horizontal', dataset='train')
+            test_dataset = FATE(parser.args.data_dir, inner_task = 'default_credit_horizontal', dataset='test')                   
+        elif parser.args.data_set == 'breast_horizontal':
+            from fedscale.dataloaders.fate import FATE
+            train_dataset = FATE(parser.args.data_dir, inner_task = 'breast_horizontal', dataset='train')
+            test_dataset = FATE(parser.args.data_dir, inner_task = 'breast_horizontal', dataset='test')                   
+        elif parser.args.data_set == 'vehicle_scale_horizontal':
+            from fedscale.dataloaders.fate import FATE
+            train_dataset = FATE(parser.args.data_dir, inner_task = 'vehicle_scale_horizontal', dataset='train')
+            test_dataset = FATE(parser.args.data_dir, inner_task = 'vehicle_scale_horizontal', dataset='test')   
+        elif parser.args.data_set == 'student_horizontal':
+            from fedscale.dataloaders.fate import FATE
+            train_dataset = FATE(parser.args.data_dir, inner_task = 'student_horizontal', dataset='train')
+            test_dataset = FATE(parser.args.data_dir, inner_task = 'student_horizontal', dataset='test')
         else:
             logging.info('DataSet must be {}!'.format(
                 ['Mnist', 'Cifar', 'openImg', 'blog', 'stackoverflow', 'speech', 'yelp']))
