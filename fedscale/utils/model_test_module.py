@@ -10,6 +10,8 @@ from torch.autograd import Variable
 # libs from fedscale
 import fedscale.cloud.config_parser as parser
 from fedscale.dataloaders.nlp import mask_tokens
+from sklearn.metrics import roc_auc_score
+
 
 if parser.args.task == "detection":
     import numpy as np
@@ -63,6 +65,8 @@ def test_pytorch_model(rank, model, test_data, device='cpu', criterion=nn.NLLLos
     perplexity_loss = 0.
 
     total_cer, total_wer, num_tokens, num_chars = 0, 0, 0, 0
+
+    Predict, Target = None, None
 
     model = model.to(device=device)  # load by pickle
     model.eval()
@@ -266,6 +270,33 @@ def test_pytorch_model(rank, model, test_data, device='cpu', criterion=nn.NLLLos
                     loss = criterion(
                         outputs, target, output_sizes, target_sizes)
                     test_loss += loss.data.item()
+                elif parser.args.task == "simple":
+                    data, target = Variable(data).to(
+                        device=device), Variable(target).to(device=device)
+                    output = model(data)
+                    if parser.args.data_set == "student_horizontal":
+                        loss = criterion(output.reshape(-1), target)
+                    else:
+                        loss = criterion(output, target)
+                    test_loss += loss.data.item()  # Variable.data
+
+                    if parser.args.data_set == 'student_horizontal':
+                        my_mse += loss.data.item() * len(target)
+                        batch_num += 1
+                    else:    
+                        acc = accuracy(output, target, topk=(1, 2))
+                        correct += acc[0].item()
+                        top_5 += acc[1].item()
+
+                        if Predict == None:
+                            Predict = output[:,-1].reshape(-1)
+                        else:
+                            Predict = torch.cat((Predict, output[:,-1].reshape(-1)))
+                        
+                        if Target == None:
+                            Target = target.reshape(-1)
+                        else:
+                            Target = torch.cat((Target, target.reshape(-1)))
                 else:
                     data, target = Variable(data).to(
                         device=device), Variable(target).to(device=device)
@@ -283,6 +314,17 @@ def test_pytorch_model(rank, model, test_data, device='cpu', criterion=nn.NLLLos
                 logging.info(f"Testing of failed as {ex}")
                 break
             test_len += len(target)
+
+
+    if parser.args.data_set == 'student_horizontal':
+        logging.info('Rank {}: (True) MSE Loss = {}, (Sum) MSE Loss = {}'
+                 .format(rank, my_mse / test_len, my_mse / batch_num))
+        testRes = {'top_1': 0., 'top_5': 0.,
+               'test_loss': test_loss * test_len, 'test_len': test_len}
+
+        with open('record_exp.txt','w') as f:
+            f.write(f'mse\n{my_mse / batch_num}')
+        return test_loss, 0.0, 0.0, testRes
 
     if parser.args.task == 'voice':
         correct,  top_5, test_len = float(
@@ -310,7 +352,21 @@ def test_pytorch_model(rank, model, test_data, device='cpu', criterion=nn.NLLLos
     testRes = {'top_1': correct, 'top_5': top_5,
                'test_loss': sum_loss, 'test_len': test_len}
 
-    return test_loss, acc, acc_5, testRes
+    if parser.args.task != "simple":
+        with open('record_exp.txt','w') as f:
+            f.write(f'accuracy\n{acc}')
+        logging.info('Rank {}: Test set: Average loss: {}, Top-1 Accuracy: {}/{} ({}), Top-5 Accuracy: {}'
+                 .format(rank, test_loss, correct, len(test_data.dataset), acc, acc_5))
+        return test_loss, acc, acc_5, testRes
+    else:
+        logging.info(f"The target looks like {Target[:5]}")
+        AUC = roc_auc_score(Target.cpu(), Predict.cpu())
+        with open('record_exp.txt','w') as f:
+            f.write(f'auc\n{AUC}')
+        logging.info('Rank {}: Test set: Average loss: {}, Top-1 Accuracy: {}/{} ({}), AUC score: {}'
+                 .format(rank, test_loss, correct, len(test_data.dataset), acc, AUC))
+        return test_loss, acc, AUC, testRes
+
 
 
 def accuracy(output, target, topk=(1,)):

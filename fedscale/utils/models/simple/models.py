@@ -41,13 +41,13 @@ class LinearRegression(nn.Module):
 
 class LeNetForMNIST(nn.Module):
 
-    def __init__(self):
+    def __init__(self, num_classes = 62):
         super(LeNetForMNIST, self).__init__()
-        self.conv1 = nn.Conv2d(1, 6, 5)
+        self.conv1 = nn.Conv2d(1, 6, 5, padding=2, padding_mode='reflect')
         self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 4 * 4, 120)
+        self.fc1 = nn.Linear(16 * 5 * 5, 120)
         self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
+        self.fc3 = nn.Linear(84, num_classes)
 
     def forward(self, x):
         x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
@@ -533,8 +533,8 @@ class LogisticRegression(nn.Module):
 
     def forward(self, x):
         x = x.reshape(-1, self.input_dim)
-        #output = torch.sigmoid(self.linear(x))
-        output = self.linear(x)
+        output = torch.sigmoid(self.linear(x))
+        # output = self.linear(x)
         return output
 
 # ============================= SVM ==============================
@@ -717,3 +717,30 @@ class SentimentClassifier(nn.Module):
         logits = self.cls_layer(cls_rep)
 
         return self.m(logits)
+
+
+class MLP(nn.Module):
+    def __init__(self, input_dim, output_dim, hidden_dim = [8]):
+        super(MLP, self).__init__()
+
+        self.input_dim = input_dim
+
+        self.model = nn.Sequential()
+
+        fc = nn.Linear(input_dim, hidden_dim[0])
+        self.model.add_module('fc1', fc)
+        self.model.add_module('Relu1', nn.ReLU())
+
+        hidden_width = len(hidden_dim)
+        for i in range(1,hidden_width):
+            fc = nn.Linear(hidden_dim[i-1], hidden_dim[i])
+            self.model.add_module('fc' + str(i+1), fc)
+            self.model.add_module('Relu' + str(i+1), nn.ReLU())
+        
+        fc = nn.Linear(hidden_dim[-1], output_dim)
+        self.model.add_module('fc_last', fc)
+
+    def forward(self, x):
+        x = x.view(-1,self.input_dim)
+        return self.model(x)
+

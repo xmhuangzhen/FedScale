@@ -3,6 +3,8 @@ import csv
 import logging
 import random
 import time
+import os
+import json
 from collections import defaultdict
 from random import Random
 
@@ -106,12 +108,14 @@ class DataPartitioner(object):
         logging.info("partitioning femnist dataset")
 
         self.partitions = []
+        logging.info(f"data_dir:{data_dir}")
 
         if self.isTest:
             data_dir = os.path.join(data_dir,'test')
         else:
             data_dir = os.path.join(data_dir,'train')
         
+
         isExists = os.path.exists(data_dir)
         logging.info(f"checking:{isExists}")
 

@@ -130,11 +130,11 @@ class Executor(object):
         training_sets = DataPartitioner(
             data=train_dataset, args=self.args, numOfClass=self.args.num_class)
         training_sets.partition_data_helper(
-            num_clients=self.args.num_participants, data_map_file=self.args.data_map_file)
+            num_clients=self.args.num_participants, data_map_file=self.args.data_map_file, data_dir = self.args.data_dir)
 
         testing_sets = DataPartitioner(
             data=test_dataset, args=self.args, numOfClass=self.args.num_class, isTest=True)
-        testing_sets.partition_data_helper(num_clients=self.num_executors)
+        testing_sets.partition_data_helper(num_clients=self.num_executors, data_dir = self.args.data_dir)
 
         logging.info("Data partitioner completes ...")
 
@@ -390,13 +390,13 @@ class Executor(object):
                     train_model = self.deserialize_response(request.data)
                     train_config['model'] = train_model
                     train_config['client_id'] = int(train_config['client_id'])
-                    self.logger.training_round_start()
-                    self.logger.computation_start()
+                    # self.logger.training_round_start()
+                    # self.logger.computation_start()
 
                     client_id, train_res = self.Train(train_config)
 
-                    self.logger.computation_end()
-                    self.logger.communication_start(target_id = 0)
+                    # self.logger.computation_end()
+                    # self.logger.communication_start(target_id = 0)
 
                     # Upload model updates
                     future_call = self.aggregator_communicator.stub.CLIENT_EXECUTE_COMPLETION.future(
@@ -405,8 +405,8 @@ class Executor(object):
                                                     meta_result=None, data_result=self.serialize_response(train_res)
                                                     ))
                     future_call.add_done_callback(lambda _response: self.dispatch_worker_events(_response.result()))
-                    self.logger.communication_end(metrics={'byte': self.model_update_size})
-                    self.logger.training_round_end(metrics={'client_num': self.args.
+                    # self.logger.communication_end(metrics={'byte': self.model_update_size})
+                    # self.logger.training_round_end(metrics={'client_num': self.args.num_participants})
                     if self.round == self.args.rounds - 1 and self.not_end:
                         self.logger.training_end()
                         self.logger.end()
