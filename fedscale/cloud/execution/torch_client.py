@@ -37,9 +37,6 @@ class TorchClient(ClientBase):
         self.completed_steps = 0
         self.loss_squared = 0
 
-        self.logger = flbenchmark.logging.Logger(id=args.this_rank, agent_type='client')
-        self.not_end = True
-
     @overrides
     def train(self, client_data, model, conf):
         """

@@ -390,13 +390,13 @@ class Executor(object):
                     train_model = self.deserialize_response(request.data)
                     train_config['model'] = train_model
                     train_config['client_id'] = int(train_config['client_id'])
-                    # self.logger.training_round_start()
-                    # self.logger.computation_start()
+                    self.logger.training_round_start()
+                    self.logger.computation_start()
 
                     client_id, train_res = self.Train(train_config)
 
-                    # self.logger.computation_end()
-                    # self.logger.communication_start(target_id = 0)
+                    self.logger.computation_end()
+                    self.logger.communication_start(target_id = 0)
 
                     # Upload model updates
                     future_call = self.aggregator_communicator.stub.CLIENT_EXECUTE_COMPLETION.future(
@@ -405,8 +405,8 @@ class Executor(object):
                                                     meta_result=None, data_result=self.serialize_response(train_res)
                                                     ))
                     future_call.add_done_callback(lambda _response: self.dispatch_worker_events(_response.result()))
-                    # self.logger.communication_end(metrics={'byte': self.model_update_size})
-                    # self.logger.training_round_end(metrics={'client_num': self.args.num_participants})
+                    self.logger.communication_end(metrics={'byte': self.model_update_size})
+                    self.logger.training_round_end(metrics={'client_num': self.args.num_participants})
                     if self.round == self.args.rounds - 1 and self.not_end:
                         self.logger.training_end()
                         self.logger.end()

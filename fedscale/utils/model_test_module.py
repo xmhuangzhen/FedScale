@@ -364,7 +364,6 @@ def test_pytorch_model(rank, model, test_data, device='cpu', criterion=nn.NLLLos
         logging.info(f'Target.cpu:{Target.cpu()}')
         logging.info(f'Predict:{Predict}')
         logging.info(f'Predict.cpu:{Predict.cpu()}')
-        from torchsummary import summary
         # logging.info(f'model summary:{summary(model,input_size=(10,))}')
         AUC = roc_auc_score(Target.cpu(), Predict.cpu())
         with open('record_exp.txt','w') as f:
