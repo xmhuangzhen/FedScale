@@ -13,6 +13,7 @@ from fedscale.cloud.internal.torch_model_adapter import TorchModelAdapter
 from fedscale.dataloaders.nlp import mask_tokens
 from fedscale.utils.model_test_module import test_pytorch_model
 
+import flbenchmark.logging
 
 class TorchClient(ClientBase):
     """Implements a PyTorch-based client for training and evaluation."""
@@ -35,6 +36,9 @@ class TorchClient(ClientBase):
         self.epoch_train_loss = 1e-4
         self.completed_steps = 0
         self.loss_squared = 0
+
+        self.logger = flbenchmark.logging.Logger(id=args.this_rank, agent_type='client')
+        self.not_end = True
 
     @overrides
     def train(self, client_data, model, conf):
@@ -67,8 +71,9 @@ class TorchClient(ClientBase):
         # NOTE: If one may hope to run fixed number of epochs, instead of iterations,
         # use `while self.completed_steps < conf.local_steps * len(client_data)` instead
         while self.completed_steps < conf.local_steps:
+            logging.info(f"completed_steps:{self.completed_steps}")
             try:
-                self.train_step(client_data, conf, model, optimizer, criterion)
+                self.train_step(client_data, conf, model, optimizer, criterion, tokenizer)
             except Exception as ex:
                 error_type = ex
                 break
@@ -139,110 +144,113 @@ class TorchClient(ClientBase):
                 reduction='none').to(device=self.device)
         return criterion
 
-    def train_step(self, client_data, conf, model, optimizer, criterion):
+    def train_step(self, client_data, conf, model, optimizer, criterion, tokenizer):
 
-        for data_pair in client_data:
-            if conf.task == 'nlp':
-                (data, _) = data_pair
-                data, target = mask_tokens(
-                    data, tokenizer, conf, device=self.device)
-            elif conf.task == 'voice':
-                (data, target, input_percentages,
-                 target_sizes), _ = data_pair
-                input_sizes = input_percentages.mul_(
-                    int(data.size(3))).int()
-            elif conf.task == 'detection':
-                temp_data = data_pair
-                target = temp_data[4]
-                data = temp_data[0:4]
-            else:
-                (data, target) = data_pair
+        logging.info(f"train_step:{conf.task}")
 
-            if conf.task == "detection":
-                self.im_data.resize_(data[0].size()).copy_(data[0])
-                self.im_info.resize_(data[1].size()).copy_(data[1])
-                self.gt_boxes.resize_(data[2].size()).copy_(data[2])
-                self.num_boxes.resize_(data[3].size()).copy_(data[3])
-            elif conf.task == 'speech':
-                data = torch.unsqueeze(data, 1).to(device=self.device)
-            elif conf.task == 'text_clf' and conf.model == 'albert-base-v2':
-                (data, masks) = data
-                data, masks = Variable(data).to(
-                    device=self.device), Variable(masks).to(device=self.device)
-
-            else:
-                data = Variable(data).to(device=self.device)
-
-            target = Variable(target).to(device=self.device)
-
-            if conf.task == 'nlp':
-                outputs = model(data, labels=target)
-                loss = outputs[0]
-            elif conf.task == 'voice':
-                outputs, output_sizes = model(data, input_sizes)
-                outputs = outputs.transpose(0, 1).float()  # TxNxH
-                loss = criterion(
-                    outputs, target, output_sizes, target_sizes)
-            elif conf.task == 'text_clf' and conf.model == 'albert-base-v2':
-                outputs = model(
-                    data, attention_mask=masks, labels=target)
-                loss = outputs.loss
-                output = outputs.logits
-            elif conf.task == "detection":
-                rois, cls_prob, bbox_pred, \
-                rpn_loss_cls, rpn_loss_box, \
-                RCNN_loss_cls, RCNN_loss_bbox, \
-                rois_label = model(
-                    self.im_data, self.im_info, self.gt_boxes, self.num_boxes)
-
-                loss = rpn_loss_cls + rpn_loss_box \
-                       + RCNN_loss_cls + RCNN_loss_bbox
-
-                loss_rpn_cls = rpn_loss_cls.item()
-                loss_rpn_box = rpn_loss_box.item()
-                loss_rcnn_cls = RCNN_loss_cls.item()
-                loss_rcnn_box = RCNN_loss_bbox.item()
-
-            else:
-                output = model(data)
-                loss = criterion(output, target)
-
-            # ======== collect training feedback for other decision components [e.g., oort selector] ======
-
-            if conf.task == 'nlp' or (conf.task == 'text_clf' and conf.model == 'albert-base-v2'):
-                loss_list = [loss.item()]  # [loss.mean().data.item()]
-
-            elif conf.task == "detection":
-                loss_list = [loss.tolist()]
-                loss = loss.mean()
-            else:
-                loss_list = loss.tolist()
-                loss = loss.mean()
-
-            temp_loss = sum(loss_list) / float(len(loss_list))
-            self.loss_squared = sum([l ** 2 for l in loss_list]
-                                    ) / float(len(loss_list))
-            # only measure the loss of the first epoch
-            if self.completed_steps < len(client_data):
-                if self.epoch_train_loss == 1e-4:
-                    self.epoch_train_loss = temp_loss
+        for u in range(conf.inner_step):
+            for data_pair in client_data:
+                if conf.task == 'nlp':
+                    (data, _) = data_pair
+                    data, target = mask_tokens(
+                        data, tokenizer, conf, device=self.device)
+                elif conf.task == 'voice':
+                    (data, target, input_percentages,
+                    target_sizes), _ = data_pair
+                    input_sizes = input_percentages.mul_(
+                        int(data.size(3))).int()
+                elif conf.task == 'detection':
+                    temp_data = data_pair
+                    target = temp_data[4]
+                    data = temp_data[0:4]
                 else:
-                    self.epoch_train_loss = (
-                                                    1. - conf.loss_decay) * self.epoch_train_loss + conf.loss_decay * temp_loss
+                    (data, target) = data_pair
 
-            # ========= Define the backward loss ==============
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                if conf.task == "detection":
+                    self.im_data.resize_(data[0].size()).copy_(data[0])
+                    self.im_info.resize_(data[1].size()).copy_(data[1])
+                    self.gt_boxes.resize_(data[2].size()).copy_(data[2])
+                    self.num_boxes.resize_(data[3].size()).copy_(data[3])
+                elif conf.task == 'speech':
+                    data = torch.unsqueeze(data, 1).to(device=self.device)
+                elif conf.task == 'text_clf' and conf.model == 'albert-base-v2':
+                    (data, masks) = data
+                    data, masks = Variable(data).to(
+                        device=self.device), Variable(masks).to(device=self.device)
 
-            # ========= Weight handler ========================
-            self.optimizer.update_client_weight(
-                conf, model, self.global_model if self.global_model is not None else None)
+                else:
+                    data = Variable(data).to(device=self.device)
 
-            self.completed_steps += 1
+                target = Variable(target).to(device=self.device)
 
-            if self.completed_steps == conf.local_steps:
-                break
+                if conf.task == 'nlp':
+                    outputs = model(data, labels=target)
+                    loss = outputs[0]
+                elif conf.task == 'voice':
+                    outputs, output_sizes = model(data, input_sizes)
+                    outputs = outputs.transpose(0, 1).float()  # TxNxH
+                    loss = criterion(
+                        outputs, target, output_sizes, target_sizes)
+                elif conf.task == 'text_clf' and conf.model == 'albert-base-v2':
+                    outputs = model(
+                        data, attention_mask=masks, labels=target)
+                    loss = outputs.loss
+                    output = outputs.logits
+                elif conf.task == "detection":
+                    rois, cls_prob, bbox_pred, \
+                    rpn_loss_cls, rpn_loss_box, \
+                    RCNN_loss_cls, RCNN_loss_bbox, \
+                    rois_label = model(
+                        self.im_data, self.im_info, self.gt_boxes, self.num_boxes)
+
+                    loss = rpn_loss_cls + rpn_loss_box \
+                        + RCNN_loss_cls + RCNN_loss_bbox
+
+                    loss_rpn_cls = rpn_loss_cls.item()
+                    loss_rpn_box = rpn_loss_box.item()
+                    loss_rcnn_cls = RCNN_loss_cls.item()
+                    loss_rcnn_box = RCNN_loss_bbox.item()
+
+                else:
+                    output = model(data)
+                    loss = criterion(output, target)
+
+                # ======== collect training feedback for other decision components [e.g., oort selector] ======
+
+                if conf.task == 'nlp' or (conf.task == 'text_clf' and conf.model == 'albert-base-v2'):
+                    loss_list = [loss.item()]  # [loss.mean().data.item()]
+
+                elif conf.task == "detection":
+                    loss_list = [loss.tolist()]
+                    loss = loss.mean()
+                else:
+                    loss_list = loss.tolist()
+                    loss = loss.mean()
+
+                temp_loss = sum(loss_list) / float(len(loss_list))
+                self.loss_squared = sum([l ** 2 for l in loss_list]
+                                        ) / float(len(loss_list))
+                # only measure the loss of the first epoch
+                if self.completed_steps < len(client_data):
+                    if self.epoch_train_loss == 1e-4:
+                        self.epoch_train_loss = temp_loss
+                    else:
+                        self.epoch_train_loss = (
+                                                        1. - conf.loss_decay) * self.epoch_train_loss + conf.loss_decay * temp_loss
+
+                # ========= Define the backward loss ==============
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                # ========= Weight handler ========================
+                self.optimizer.update_client_weight(
+                    conf, model, self.global_model if self.global_model is not None else None)
+
+                self.completed_steps += 1
+
+                # if self.completed_steps == conf.local_steps:
+                    # break
 
     @overrides
     def test(self, client_data, model, conf):

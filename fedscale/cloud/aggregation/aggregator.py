@@ -483,7 +483,12 @@ class Aggregator(job_api_pb2_grpc.JobServiceServicer):
             else:
                 for key in accumulator:
                     accumulator[key] += self.test_result_accumulator[i][key]
-        self.testing_history['perf'][self.round] = {'round': self.round, 'clock': self.global_virtual_clock}
+        self.testing_history['perf'][self.round] = {'round': self.round, 'clock': self.global_virtual_clock,
+                                                    'top_1': round(accumulator['top_1']/accumulator['test_len']*100.0, 4),
+                                                    'top_5': round(accumulator['top_5']/accumulator['test_len']*100.0, 4),
+                                                    'loss': accumulator['test_loss']/accumulator['test_len'],
+                                                    'test_len': accumulator['test_len']
+                                                    }
         for metric_name in accumulator.keys():
             if metric_name == 'test_loss':
                 self.testing_history['perf'][self.round]['loss'] = accumulator['test_loss'] \

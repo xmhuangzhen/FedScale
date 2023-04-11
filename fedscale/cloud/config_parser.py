@@ -3,6 +3,8 @@ import argparse
 from fedscale.cloud import commons
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--seed', type=int, default=1)
+
 parser.add_argument('--job_name', type=str, default='demo_job')
 parser.add_argument('--log_path', type=str, default='./',
                     help="default path is ../log")
@@ -64,9 +66,11 @@ parser.add_argument('--save_checkpoint', type=bool, default=False)
 # The configuration of different hyper-parameters for training
 parser.add_argument('--rounds', type=int, default=50)
 parser.add_argument('--local_steps', type=int, default=20)
+parser.add_argument('--inner_step', type=int, default=1)
 parser.add_argument('--batch_size', type=int, default=30)
 parser.add_argument('--test_bsz', type=int, default=128)
 parser.add_argument('--backend', type=str, default="gloo")
+parser.add_argument('--upload_step', type=int, default=20)
 parser.add_argument('--learning_rate', type=float, default=5e-2)
 parser.add_argument('--min_learning_rate', type=float, default=5e-5)
 parser.add_argument('--input_dim', type=int, default=0)
@@ -231,7 +235,7 @@ model_factor = {'shufflenet': 0.0644/0.0554,
                 'resnet': 0.135/0.0554,
                 }
 
-args.num_class = datasetCategories.get(args.data_set, args.num_classes)
+args.num_class = datasetCategories.get(args.data_set, 2)
 for model_name in model_factor:
     if model_name in args.model:
         args.clock_factor = args.clock_factor * model_factor[model_name]

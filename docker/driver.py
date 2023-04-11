@@ -46,6 +46,8 @@ def process_cmd(json_file, local=False):
 
     # yaml_conf = load_yaml_conf(yaml_file)
 
+    os.environ["CUDA_VISIBLE_DEVICES"]="2"
+
     yaml_conf = load_yaml_conf("./base_conf.yml")
 
     if 'use_container' in yaml_conf:
@@ -64,13 +66,15 @@ def process_cmd(json_file, local=False):
     ps_ip = yaml_conf['ps_ip']
     worker_ips, total_gpus = [], []
     cmd_script_list = []
+    max_process = min(4, json_conf["training_param"]["client_per_round"])
 
-    executor_configs = "=".join(yaml_conf['worker_ips']) if 'worker_ips' in yaml_conf else ''
+    executor_configs = "=".join(yaml_conf['worker_ips']).split(':')[0] + f':[{max_process}]'
     if 'worker_ips' in yaml_conf:
         for ip_gpu in yaml_conf['worker_ips']:
             ip, gpu_list = ip_gpu.strip().split(':')
             worker_ips.append(ip)
-            total_gpus.append(eval(gpu_list))
+            # total_gpus.append(eval(gpu_list))
+            total_gpus.append([max_process])
 
     time_stamp = datetime.datetime.fromtimestamp(
         time.time()).strftime('%m%d_%H%M%S')
@@ -206,7 +210,10 @@ def process_cmd(json_file, local=False):
 
                     worker_cmd = f" docker run -i --name fedscale-exec{rank_id}-{time_stamp} --network {yaml_conf['container_network']} -p {ports[rank_id]}:32000 --mount type=bind,source={yaml_conf['data_path']},target=/FedScale/benchmark fedscale/fedscale-exec"
                 else:
-                    worker_cmd = f" python {yaml_conf['exp_path']}/{yaml_conf['executor_entry']} {conf_script} --this_rank={rank_id} --num_executors={total_gpu_processes} --cuda_device=cuda:{cuda_id} "
+                    worker_cmd = f" python {yaml_conf['exp_path']}/{yaml_conf['executor_entry']} {conf_script} --this_rank={rank_id} --num_executors={total_gpu_processes} "
+                    if job_conf['use_cuda'] == True:
+                        worker_cmd += f" --cuda_device=cuda:{cuda_id}"
+                    print(f"worker_cmd:{worker_cmd}")
                 rank_id += 1
 
                 with open(f"{job_name}_logging", 'a') as fout:
