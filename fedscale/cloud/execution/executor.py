@@ -339,7 +339,7 @@ class Executor(object):
                                      batch_size=self.args.test_bsz, args=self.args,
                                      isTest=True, collate_fn=self.collate_fn)
 
-        test_results = client.test(data_loader, self.model_adapter.get_model(), test_config)
+        test_results = client.test(data_loader, self.model_adapter.get_model(), test_config, self.logger)
         self.log_test_result(test_results)
         gc.collect()
 

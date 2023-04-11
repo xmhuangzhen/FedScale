@@ -43,6 +43,7 @@ def load_json_conf(json_file):
 
 def process_cmd(json_file, local=False):
     json_conf = load_json_conf(json_file)
+    json_conf = {'framework': 'FedScale', 'dataset': 'give_credit_horizontal', 'algorithm': 'fed_avg', 'model': 'mlp_128', 'bench_param': {'mode': 'local', 'device': 'gpu'}, 'training_param': {'epochs': 30, 'batch_size': 32, 'inner_step': 1, 'learning_rate': 0.01, 'client_per_round': 2, 'loss_func': 'cross_entropy', 'optimizer': 'sgd', 'optimizer_param': {'momentum': 0.9, 'dampening': 0, 'weight_decay': 0, 'nesterov': False}}, 'data_dir': '/home/haoyukim/data'}
 
     # yaml_conf = load_yaml_conf(yaml_file)
 

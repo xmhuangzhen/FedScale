@@ -250,7 +250,7 @@ class TorchClient(ClientBase):
                     # break
 
     @overrides
-    def test(self, client_data, model, conf):
+    def test(self, client_data, model, conf, exe_log = None):
         """
         Perform a testing task.
         :param client_data: client evaluation dataset
@@ -267,17 +267,25 @@ class TorchClient(ClientBase):
                                                                  device=self.device, criterion=criterion,
                                                                  tokenizer=conf.tokenizer)
         
+        with exe_log.model_evaluation() as e:
+            e.report_metric('accuracy', acc)
+
         if self.args.task == "simple":
             AUC = acc_5
             logging.info(
                 "Test results: Eval_time {}, test_loss {}, test_accuracy {:.2f}%, "
                 "AUC score{:.2f} \n"
                     .format(round(time.time() - evalStart, 4), test_loss, acc * 100., AUC))
+            with exe_log.model_evaluation() as e:
+                e.report_metric('AUC', AUC)
         else:
             logging.info(
                 "Test results: Eval_time {}, test_loss {}, test_accuracy {:.2f}%, "
                 "test_5_accuracy {:.2f}% \n"
                     .format(round(time.time() - evalStart, 4), test_loss, acc * 100., acc_5 * 100.))
+            with exe_log.model_evaluation() as e:
+                e.report_metric('acc_5', acc_5)
+
         return test_results
 
     @overrides
