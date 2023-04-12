@@ -33,6 +33,8 @@ class TorchClient(ClientBase):
             self.num_boxes = Variable(torch.LongTensor(1).cuda())
             self.gt_boxes = Variable(torch.FloatTensor(1).cuda())
 
+        # self.logger = flbenchmark.logging.Logger(id=args.this_rank, agent_type='client')
+
         self.epoch_train_loss = 1e-4
         self.completed_steps = 0
         self.loss_squared = 0

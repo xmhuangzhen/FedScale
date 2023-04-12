@@ -898,7 +898,7 @@ class Aggregator(job_api_pb2_grpc.JobServiceServicer):
                     present_round += 1
 
                     self.dispatch_client_events(commons.CLIENT_TRAIN)
-                    if present_round < args.rounds:
+                    if present_round < parser.args.rounds:
                         self.logger.training_round_start()
                         started += 1
 

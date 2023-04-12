@@ -168,6 +168,7 @@ def test_pytorch_model(rank, model, test_data, device='cpu', criterion=nn.NLLLos
                     all_boxes, output_dir, parser.args.this_rank)
                 return 0, mean_ap, mean_ap, {'top_1': mean_ap, 'top_5': mean_ap, 'test_loss': 0, 'test_len': num_images}
 
+
         for data, target in test_data:
             try:
                 if parser.args.task == 'nlp':
