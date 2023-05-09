@@ -929,12 +929,12 @@ class Aggregator(job_api_pb2_grpc.JobServiceServicer):
         self.logger.training_round_end(metrics={'client_num': self.args.num_participants})
         self.logger.training_end()
         
-        self.logger.model_evaluation_start()
-        f = open('record_exp.txt','r')
-        metric_name = f.readline()[:-1]
-        logging.info(f"metric_name = {metric_name}")
-        value = float(f.readline())
-        self.logger.model_evaluation_end(metrics={metric_name: value})
+        # self.logger.model_evaluation_start()
+        # f = open('record_exp.txt','r')
+        # metric_name = f.readline()[:-1]
+        # logging.info(f"metric_name = {metric_name}")
+        # value = float(f.readline())
+        # self.logger.model_evaluation_end(metrics={metric_name: value})
 
         # End the logging
         self.logger.end()
